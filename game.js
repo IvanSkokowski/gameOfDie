@@ -1,204 +1,206 @@
 "use strict";
-function createArray2D(d1, d2){
-    let arr = new Array(d1);
-    for (let x = 0; x < d1; ++x){
-        arr[x] = new Array(d2);
+window.onload = function() {
+    const CellStatus = {
+        empty: {
+            status: 0,
+            color: "#c9d2c9"
+        },
+        mined: {
+            status: 1,
+            color: "#ee650a"
+        },
+        cracked: {
+            status: 2,
+            color: "#21de21"
+        },
+        exploded: {
+            status: 3,
+            color: "#ff0000"
+        },
+        // TODO: hide flagEmpty and flagMined as one status
+        flagEmpty: {
+            status: 4,
+            color: "crimson"
+        },
+        flagMined: {
+            status: 5,
+            color: "crimson"
+        },
     }
-    return arr;
-}
-function initArray2D(d1, d2){
-    let arr = new Array(d1);
-    for (let x = 0; x < d1; ++x){
-        arr[x] = new Array(d2);
+    const GameStatus = {
+        defeat: 0,
+        won: 1,
+        play: 2,
     }
-    return arr;
-}
-function getMousePos(canvas, evt) {
-    var rect = canvas.getBoundingClientRect();
-    return {
-      x: evt.clientX - rect.left,
-      y: evt.clientY - rect.top
-    };
-  }
-const MineStatus = {
-    empty: {
-        status: 0,
-        color: "#c9d2c9"
-    },
-    mined: {
-        status: 1,
-        color: "#ee650a"
-    },
-    cracked: {
-        status: 2,
-        color: "#21de21"
-    },
-    exploded: {
-        status: 3,
-        color: "#ff0000"
+    const GameInfo = {
+        status: GameStatus.play,
+        mineCount: 16,
+        time: 0,
     }
-}
 
-function randomInteger(min, max) {
-    // получить случайное число от (min-0.5) до (max+0.5)
-    let rand = min - 0.5 + Math.random() * (max - min + 1);
-    return Math.round(rand);
-  }
-// GAME HERE: !!!!!!!
+    function randomInteger(min, max) {
+        return Math.round(min - 0.5 + Math.random() * (max - min + 1));
+    }
 
-window.onload = function () {
     let canvas = document.getElementById("myCanvas"),
-    context = canvas.getContext("2d"),
-    w = canvas.width,
-    h = canvas.height;
-
-    let mouse = { x:0, y:0};
-    var draw = false;
-
-    
-
-    // gameboard settings
-
+        context = canvas.getContext("2d"),
+        w = canvas.width,
+        h = canvas.height;
     let colCountVisible = 10,
-    rowCountVisible = 10;
-    let emptyCellsWallThickness = 1, // minimum 1
-        colCount = colCountVisible + emptyCellsWallThickness+emptyCellsWallThickness,
-        rowCount = rowCountVisible + emptyCellsWallThickness+emptyCellsWallThickness,
-        minedAmount = 0.35; // 0.0...1.0
-    let minesCount = Math.round(minedAmount*(colCountVisible*rowCountVisible));
-    
-    console.log('Game Size=', colCountVisible*colCountVisible+' ('+colCountVisible+'x'+colCountVisible+')');
-    console.log('empty=', colCountVisible*colCountVisible-minesCount);
+        rowCountVisible = 10;
+    let wallThickness = 1, // minimum 1
+        colCount = colCountVisible + wallThickness + wallThickness,
+        rowCount = rowCountVisible + wallThickness + wallThickness,
+        minedAmount = 0.16; // 0.0...1.0
+    let minesCount = Math.round(minedAmount * (colCountVisible * rowCountVisible));
+    let cellSize = { x: w / colCountVisible, y: h / rowCountVisible };
+
+    function initBoard(rowCount, colCount) {
+        let board = new Array(rowCount).fill(0).map(() => new Array(colCount).fill(0));
+        return board;
+    }
+
+    function plantMines(mineBoard, minesCount) {
+        let plantedMines = 0;
+        while (plantedMines < minesCount) {
+            let rndX = randomInteger(wallThickness, colCountVisible);
+            let rndY = randomInteger(wallThickness, rowCountVisible);
+            // TODO:24.09.2020:Ivan: Add option -> ограничение количества мин, рядом с которыми больше N-мин
+            if (mineBoard[rndY][rndX] === CellStatus.mined.status) {
+                continue;
+            } else {
+                mineBoard[rndY][rndX] = CellStatus.mined.status;
+                plantedMines++;
+            }
+        }
+    }
+
+    function getNeighboursCount(arr, x, y) {
+        let result = 0;
+        let x1 = 0;
+        let y1 = 0;
+        for (let i = -1; i < 2; i++) {
+            for (let j = -1; j < 2; j++) {
+                x1 = x + j;
+                y1 = y + i;
+                result += arr[y1][x1] === CellStatus.mined.status ? 1 : 0;
+            }
+        }
+        result -= arr[y][x] === CellStatus.mined.status ? 1 : 0;
+        return result;
+    }
+
+    function checkNeighbours(mineBoard, neighbours) {
+        for (let i = wallThickness; i < mineBoard.length - wallThickness; i++) {
+            for (let j = wallThickness; j < mineBoard[i].length - wallThickness; j++) {
+                neighbours[i][j] = getNeighboursCount(mineBoard, j, i);
+            }
+        }
+        return neighbours;
+    }
+    console.log('Game Size=', colCountVisible * colCountVisible + ' (' + colCountVisible + 'x' + colCountVisible + ')');
+    console.log('empty=', colCountVisible * colCountVisible - minesCount);
     console.log('mined=', minesCount);
 
-    // init memmory
-    let mineBoard = new Array(rowCount).fill(0).map(()=>new Array(colCount).fill(0));
-    
-    // clear
-    for(let i = 0; i < rowCount; i++){
-        for(let j = 0; j < colCount; j++){
-            mineBoard[i][j] = 0;
-        }
-    }
+    context.font = "9px Arial";
+    let mineBoard = initBoard(rowCount, colCount);
+    let neighboursCount = initBoard(rowCount, colCount);
+
+    plantMines(mineBoard, minesCount);
+    neighboursCount = checkNeighbours(mineBoard, neighboursCount);
+
     console.log(mineBoard);
-    // planting explosive mines 
-    let plantedMines = 0;
-    while(plantedMines < minesCount){
-        let rndX = randomInteger(emptyCellsWallThickness, colCount-emptyCellsWallThickness*2);
-        let rndY = randomInteger(emptyCellsWallThickness, rowCount-emptyCellsWallThickness*2);
-        // TODO:24.09.2020:Ivan: Add option -> ограничение количества мин, рядом с которыми больше N-мин
-        if(mineBoard[rndY][rndX] === MineStatus.mined.status){
-            continue;
-        } else {
-            mineBoard[rndY][rndX] = MineStatus.mined.status;
-            plantedMines++;
+    console.log(neighboursCount);
+    DrawCells();
+
+    function getMouseClick(e) {
+        //console.log('e.pageX=' + e.pageX);
+        //console.log('e.pageY=' + e.pageY);
+        //console.log('canvas.offsetLeft=' + canvas.offsetLeft);
+        //console.log('canvas.offsetTop=' + canvas.offsetTop);
+        return { left: e.pageX - canvas.offsetLeft, top: e.pageY - canvas.offsetTop }
+    }
+
+    function clickPosToIndex(mouse) {
+        return { x: Math.ceil(mouse.left / cellSize.x), y: Math.ceil(mouse.top / cellSize.y) };
+    }
+
+    function clickProcessor(e) {
+        if (GameInfo.status == GameStatus.play) {
+            switch (e.button) {
+                case 0:
+                    // TODO: if clicked on bomb -> show timer (mini game) to get to defuse bomb
+                    console.log('Left click!')
+                    break;
+                case 2:
+                    console.log('Right click!')
+                    break;
+
+            }
+            // let mouse = getMouseClick(e);
+            // let { x, y } = clickPosToIndex(mouse);
+            // let neighbours = getNeighboursCount(mineBoard, x, y);
+
+            // console.log(mouse, ' => ', x, y);
+            // console.log('Neighbours=' + neighbours);
         }
-        // 
+
     }
-    console.log(mineBoard);
-
-    // TODO:24.09.2020:Ivan: Test Draw mines
-    
-    // gameboard cells settings
-    let padding = 1; // padding - around cell
-    let margin = 6; // margin - game board: top left right bottom
-    // let maxCellSizeHorizontal = w / colCountVisible - padding * colCountVisible - margin*2; 
-    // let maxCellSizeVertical = w / rowCountVisible - padding * rowCountVisible - margin*2; 
-    // let maxCellSizeHorizontal = maxGameboardSize / colCountVisible - padding * colCountVisible; 
-    // let maxCellSizeVertical = maxGameboardSize / rowCountVisible - padding * rowCountVisible; 
-    
-    // TODO: симетрия
-    let cellPaddingX = 1;
-    let cellPaddingY = 1;
-    let boardLeftMargin = 10;
-    let boardTopMargin = 0;
-    let minCanvasSize = 350;
-    
-    let minCountVisible = colCountVisible < rowCountVisible ? colCountVisible : rowCountVisible;
-
-
-    let cellSizeX = minCanvasSize / minCountVisible - boardLeftMargin / minCountVisible;
-    let cellSizeY = minCanvasSize / minCountVisible - boardTopMargin / minCountVisible;
-
-    let correctCellSizeX = cellSizeX - cellPaddingX * minCountVisible;
-    let correctCellSizeY = cellSizeY - cellPaddingY * minCountVisible;
-    function DrawCells(){
-        context.beginPath();
-        for(let i = 1, y = 0; i < mineBoard.length-1; i++, y++){
-        for(let j = 1, x = 0; j < mineBoard[i].length-1; j++, x++){
-            
-            let x1 = x * (correctCellSizeX ) + (cellPaddingX ? cellPaddingX*x : 0) + boardLeftMargin;
-            let y1 = y * (correctCellSizeY ) + (cellPaddingY ? cellPaddingY*y : 0) + boardTopMargin;
-            
-            switch(mineBoard[i][j]){
-                case MineStatus.mined.status:
-                    context.fillStyle = MineStatus.mined.color;
-                    break;
-                case MineStatus.empty.status:
-                    context.fillStyle = MineStatus.empty.color;
-                    continue;
-                    break;
-                case MineStatus.cracked.status:
-                    context.fillStyle = MineStatus.cracked.color;
-                    break;
-                case MineStatus.exploded.status:
-                    context.fillStyle = MineStatus.exploded.color;
-                    break;
-                default:
-                    break
-            }
-
-            context.fillRect(
-                x1,
-                y1, 
-                correctCellSizeX, 
-                correctCellSizeY);
-            }
-        }  
-        context.closePath();
-    
-    }
-    DrawCells()
-
-
-    canvas.addEventListener('click',function(e){
-
-        mouse.x = e.pageX - this.offsetLeft;
-        mouse.y = e.pageY - this.offsetTop;
-
-        context.beginPath();
-        context.fillRect(mouse.x, mouse.y, 10, 10)
-        context.closePath();
-        //
-        console.log( mouse.x,  mouse.y)
+    canvas.addEventListener('click', function(e) {
+        clickProcessor(e);
     });
+    canvas.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        clickProcessor(e);
+        return false;
+    }, false);
 
-// END GAME: !!!!!!!
+    function DrawCells() {
+        for (let i = wallThickness, y = 0; i < rowCountVisible + wallThickness; i++, y++) {
+            for (let j = wallThickness, x = 0; j < colCountVisible + wallThickness; j++, x++) {
+                let x1 = x * (cellSize.x);
+                let y1 = y * (cellSize.y);
+                switch (mineBoard[i][j]) {
+                    case CellStatus.empty.status:
+                        context.fillStyle = CellStatus.empty.color;
+                        break;
+                    case CellStatus.mined.status:
+                        context.fillStyle = CellStatus.mined.color;
+                        break;;
+                    case CellStatus.exploded.status:
+                        context.fillStyle = CellStatus.exploded.color;
+                        break;
+                    case CellStatus.cracked.status:
+                        context.fillStyle = CellStatus.cracked.color;
+                        break;
+                    case CellStatus.flagEmpty.status:
+                        context.fillStyle = CellStatus.flagEmpty.color;
+                        break;
+                    case CellStatus.flagMined.status:
+                        context.fillStyle = CellStatus.flagMined.color;
+                        break;
+                    default:
+                        break
+                }
+                context.fillRect(x1, y1, cellSize.x, cellSize.y);
+            }
+        }
+    }
 
-    // class Game {
-    //     constructor(width, height) {
-    //         this.width = width;
-    //         this.height = height;
-    //         this.cellHeight = canvas.style.height / height;
-    //         this.cellWidth = canvas.style.width / width;
-    //         this.info();
-    //     }
-    //     info(){
-    //         console.log('gameBoard size:', this.width, 'x', this.height, '(', this.width * this.height,'cells', ')',);
-    //     }
-    //     initGameBoard(){
-    //         this.mine = createArray2D(this.width,this.height);
-    //         for(let x = 0; x < this.width; x++){
-    //             for(let y = 0; y < this.width; y++){
-                    
-    //             }
-    //         }
-    //     }
-    //     draw() {
-
-    //     }
-
-    // }
-
-    // let game = new Game(16,8)
+    function info() {
+        for (let i = wallThickness, y = 0; i < rowCountVisible + wallThickness; i++, y++) {
+            for (let j = wallThickness, x = 0; j < colCountVisible + wallThickness; j++, x++) {
+                let x1 = x * (cellSize.x);
+                let y1 = y * (cellSize.y);
+                let pos = clickPosToIndex(x1, y1);
+                let neighbours = getNeighboursCount(mineBoard, pos.x + 1, pos.y + 1);
+                let tmp = context.fillStyle;
+                context.fillStyle = 'green';
+                context.fillText(Math.round(x1).toString() + '-' + Math.round(y1).toString(), x1, y1 + cellSize.y / 3);
+                context.fillText(j.toString() + ' ' + i.toString(), x1, y1 + cellSize.y / 3 + 10);
+                context.fillText(neighbours, x1, y1 + cellSize.y / 3 + 20);
+                context.fillStyle = tmp;
+            }
+        }
+    }
 };
