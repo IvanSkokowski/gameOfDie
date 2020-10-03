@@ -9,13 +9,13 @@ window.onload = function() {
         return Math.round(min - 0.5 + Math.random() * (max - min + 1));
     }
     const Settings = {
-        w: 30,
-        gap: 2,
-        rows: 10,
-        cols: 10,
+        w: 16,
+        gap: 0,
+        rows: 20,
+        cols: 20,
         bobms: 20,
-        top: 15,
-        left: 15,
+        top: 10,
+        left: 10,
     };
     let GameInfo = {
         time: 0,
@@ -34,17 +34,17 @@ window.onload = function() {
     let imgSprites = "img/Bitmap410.bmp";
     let img = new Image();
     img.src = imgSprites;
-    img.onload = function() {
-        context.drawImage(img,
-            0, // sx
-            0, // sy
-            16, // swidth
-            16, // sheight
-            260, // x
-            260, // y
-            30, // width
-            30); // height
-    }
+    // img.onload = function() {
+    //     context.drawImage(img,
+    //         0, // sx
+    //         0, // sy
+    //         16, // swidth
+    //         16, // sheight
+    //         260, // x
+    //         260, // y
+    //         30, // width
+    //         30); // height
+    // }
 
     const images = {
         hidden: {
@@ -138,7 +138,7 @@ window.onload = function() {
             swidth: 16,
             sheight: 16,
         },
-        opened: {
+        b0: {
             sx: 0,
             sy: 240,
             swidth: 16,
@@ -156,7 +156,7 @@ window.onload = function() {
             this.neighbours = 0;
         }
         drawImage(image) {
-            let { sx, sy, swidth, sheight } = image;
+            let { swidth, sheight, sx, sy } = image;
             context.drawImage(img, sx, sy, swidth, sheight, this.x, this.y, this.w, this.w)
         }
         drawFlag() {
@@ -170,17 +170,19 @@ window.onload = function() {
             }
         }
         show() {
-            // if (this.hidden) {
-            //     this.drawImage(images.hidden);
-            //     this.drawFlag();
-            //     //todo: delete this.drawBomb();
-            //     this.drawBomb();
-            // } else {
-            //     this.drawImage(images.opened);
-            //     this.drawBomb();
-            // }
-            this.drawImage(images.opened);
-            this.drawImage(images.opened);
+            if (this.hidden) {
+                if (this.flaged) {
+                    this.drawImage(images.flag);
+                } else {
+                    this.drawImage(images.hidden);
+                }
+            } else {
+                if (this.state === CellState.bomb) {
+                    this.drawImage(images.bombExploded);
+                } else {
+                    this.drawImage(images['b' + this.neighbours]);
+                }
+            }
         }
     }
 
@@ -230,13 +232,13 @@ window.onload = function() {
         init() {
             this.setCells(Settings);
             this.plantBombs(Settings.bobms);
-            this.neighbours();
+            this.calcNeighbours();
             canvas.addEventListener('click', (e) => this.click(e));
         }
         show() {
-            this.cellBoard.map(function(row) {
-                row.map((cell) => (cell.show()))
-            })
+            img.onload = () => {
+                this.cellBoard.map((row) => { row.map((cell) => (cell.show())) })
+            }
         }
         start() {
 
@@ -262,10 +264,39 @@ window.onload = function() {
 
 
         }
+        calcNeighbours() {
+            let out = this.cellBoard.map(
+                (row, i) => {
+                    row.map(
+                        (cell, j) => {
+                            console.log(i, j, (cell.neighbours = this.neighbours({ row: i, col: j })))
+                        }
+                    )
+                });
+            //let out = this.cellBoard.map((row, i) => row.map((cell, j) => cell.neighbours = this.neighbours({ row: i, col: j })));
+            //console.log(out);
+        }
         neighbours(id) {
-            if (true) {
-
+            let nbCount = 0;
+            let dx, dy;
+            for (let i = -1; i < 2; i++) {
+                dy = id.row + i;
+                if (dy < 0 || dy > Settings.rows - 1) {
+                    continue;
+                }
+                for (let j = -1; j < 2; j++) {
+                    dx = id.col + j;
+                    if (dx < 0 || dx > Settings.cols - 1) {
+                        continue;
+                    }
+                    let cell = this.cellBoard[dy][dx];
+                    let state = cell.state;
+                    nbCount += state;
+                    // nbCount += this.cellBoard[dy][dx].state;
+                }
             }
+            return nbCount -= this.cellBoard[id.row][id.col].state;
+
         }
         lost(id) {
             console.log('game lost');
@@ -294,6 +325,4 @@ window.onload = function() {
     let game = new Game();
     game.init();
     game.show();
-
-    // todo: seems click to cell should me another class
 }
