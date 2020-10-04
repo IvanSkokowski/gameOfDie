@@ -13,7 +13,7 @@ window.onload = function() {
         gap: 0,
         rows: 20,
         cols: 20,
-        bobms: 20,
+        bobms: 40,
         top: 10,
         left: 10,
     };
@@ -34,17 +34,6 @@ window.onload = function() {
     let imgSprites = "img/Bitmap410.bmp";
     let img = new Image();
     img.src = imgSprites;
-    // img.onload = function() {
-    //     context.drawImage(img,
-    //         0, // sx
-    //         0, // sy
-    //         16, // swidth
-    //         16, // sheight
-    //         260, // x
-    //         260, // y
-    //         30, // width
-    //         30); // height
-    // }
 
     const images = {
         hidden: {
@@ -164,9 +153,18 @@ window.onload = function() {
                 this.drawImage(images.flag);
             }
         }
-        drawBomb() {
+        drawBomb(bombType) {
+
             if (this.state === CellState.bomb) {
-                this.drawImage(images.bombExploded);
+                if (bombType === 'predicted') {
+                    this.drawImage(images.bombPredict);
+                } else if (bombType === 'exploded') {
+                    this.drawImage(images.bombExploded);
+
+                } else if (bombType === 'other') {
+                    this.drawImage(images.bombFall);
+
+                }
             }
         }
         show() {
@@ -182,6 +180,10 @@ window.onload = function() {
                 } else {
                     this.drawImage(images['b' + this.neighbours]);
                 }
+
+            }
+            if (this.flaged === true) {
+                this.drawImage(images.flag);
             }
         }
     }
@@ -233,48 +235,54 @@ window.onload = function() {
             this.setCells(Settings);
             this.plantBombs(Settings.bobms);
             this.calcNeighbours();
-            canvas.addEventListener('click', (e) => this.click(e));
+            canvas.addEventListener('click', (e) => this.click(e, 'left'));
+            canvas.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                this.click(e, 'right');
+                return false;
+            }, false);
+            img.onload = () => { this.show(); };
         }
         show() {
-            img.onload = () => {
-                this.cellBoard.map((row) => { row.map((cell) => (cell.show())) })
-            }
+            this.cellBoard.map((row) => { row.map((cell) => (cell.show())) });
         }
         start() {
 
         }
-
-        click(e) {
+        isClickInBoard(x, y) {
+            return (x > Settings.left && x <= Settings.left + Settings.cols * (Settings.w + Settings.gap)) &&
+                (y > Settings.top && y <= Settings.top + Settings.rows * (Settings.w + Settings.gap))
+        }
+        click(e, button) {
             let pos = getClickPos(e);
             let { x, y } = pos;
-            if ((x > Settings.left && x <= Settings.left + Settings.cols * (Settings.w + Settings.gap)) &&
-                (y > Settings.top && y <= Settings.top + Settings.rows * (Settings.w + Settings.gap))) {
-                let id = clickPosToCellId(pos);
-                id.row -= 1;
-                id.col -= 1;
-                console.log(pos);
-                console.log(id);
-                let cell = this.cellBoard[id.row][id.col];
-                if (cell.state === CellState.bomb) {
-                    this.lost(id, cell);
-                } else {
-                    this.open(id, cell);
-                }
-            }
+            let id = clickPosToCellId(pos);
+            id.row -= 1;
+            id.col -= 1;
+            console.log(pos);
+            console.log(id);
+            if (GameInfo.status === 'play') {
+                if (this.isClickInBoard(x, y)) {
+                    let cell = this.cellBoard[id.row][id.col];
+                    if (button === 'left') {
+                        if (cell.state === CellState.bomb) {
+                            this.lost(id, cell);
+                        } else {
+                            this.open(id, cell);
+                        }
+                    } else if (button === 'right') {
+                        cell.flaged = !cell.flaged;
+                        cell.show();
+                    }
 
+                }
+
+
+            }
 
         }
         calcNeighbours() {
-            let out = this.cellBoard.map(
-                (row, i) => {
-                    row.map(
-                        (cell, j) => {
-                            console.log(i, j, (cell.neighbours = this.neighbours({ row: i, col: j })))
-                        }
-                    )
-                });
-            //let out = this.cellBoard.map((row, i) => row.map((cell, j) => cell.neighbours = this.neighbours({ row: i, col: j })));
-            //console.log(out);
+            this.cellBoard.map((row, i) => row.map((cell, j) => cell.neighbours = this.neighbours({ row: i, col: j })));
         }
         neighbours(id) {
             let nbCount = 0;
@@ -299,25 +307,129 @@ window.onload = function() {
 
         }
         lost(id) {
+            GameInfo.status = 'lost';
             console.log('game lost');
+
+            this.cellBoard.map((row, y) => {
+                row.map((cell, x) => {
+                    if (y !== id.row && x !== id.col && cell.state === CellState.bomb) {
+                        cell.hidden = false;
+                        if (cell.flaged) {
+                            cell.drawBomb('predicted');
+
+                        } else {
+                            cell.drawBomb('other');
+                        }
+
+
+                    }
+                })
+            })
+
             let cell = this.cellBoard[id.row][id.col];
             cell.hidden = false;
             cell.show();
-
         }
         open(id) {
             console.log('open');
             let cell = this.cellBoard[id.row][id.col];
-            cell.hidden = false;
-            cell.show();
             if (cell.neighbours === 0) {
                 this.search(id);
+            } else {
+                if (!cell.flaged) {
+                    cell.hidden = false;
+                    cell.show();
+                }
             }
-
         }
         search(id) {
+            let toOpen = [],
+                toClose = [],
+                completed = [],
+                nb0 = [];
 
+            let board = this.cellBoard;
+            toOpen.push(id)
+
+            while (toOpen.length > 0) {
+                checkDirections(toOpen.pop());
+            }
+
+            function openAround0(id) {
+                let opened = 0;
+                let dx, dy;
+                for (let i = -1; i < 2; i++) {
+                    dy = id.row + i;
+                    if (dy < 0 || dy > Settings.rows - 1) {
+                        continue;
+                    }
+                    for (let j = -1; j < 2; j++) {
+                        dx = id.col + j;
+                        if (dx < 0 || dx > Settings.cols - 1) {
+                            continue;
+                        }
+                        if (board[dx][dy].state === CellState.empty) {
+                            board[dx][dy].hidden = false;
+                            board[dx][dy].show();
+                        }
+                    }
+                }
+                return opened -= 1;
+
+            }
+            while (nb0.length > 0) {
+                let d0 = nb0.pop();
+                openAround0(d0);
+
+            }
+
+            function checkDirections(id) {
+                let dx, dy;
+                if (inScope(dx = id.col - 1, dy = id.row) && !completed.includes('' + dx + ' ' + dy)) {
+                    _searchRoute(dx, dy, 'top');
+                }
+                if (inScope(dx = id.col + 1, dy = id.row) && !completed.includes('' + dx + ' ' + dy)) {
+                    _searchRoute(dx, dy, 'bottom');
+                }
+                if (inScope(dx = id.col, dy = id.row - 1) && !completed.includes('' + dx + ' ' + dy)) {
+                    _searchRoute(dx, dy, 'left');
+                }
+                if (inScope(dx = id.col, dy = id.row + 1) && !completed.includes('' + dx + ' ' + dy)) {
+                    _searchRoute(dx, dy, 'right');
+                }
+            }
+
+            function inScope(dx, dy) {
+                return (dx >= 0 && dx < Settings.cols) && (dy >= 0 && dy < Settings.rows)
+            }
+
+            function _searchRoute(dx, dy, whare) {
+                let cell = board[dx][dy];
+                if (cell.neighbours === 0 && cell.hidden === true) {
+                    cell.hidden = false;
+                    cell.show();
+                    toOpen.push({ row: dy, col: dx })
+                    nb0.push({
+                        row: dy,
+                        col: dx,
+                        whare: whare == 'top' || whare == 'bottom' ? 'vertical' : whare == 'left' || whare == 'right' ? 'horisontal' : ''
+                    })
+                } else {
+                    toClose.push({
+                        row: dy,
+                        col: dx,
+                        whare: whare == 'top' || whare == 'bottom' ? 'vertical' : whare == 'left' || whare == 'right' ? 'horisontal' : ''
+                    })
+                }
+                completed.push('' + dx + ' ' + dy)
+            }
+
+            // if (board[id.row][id.col].hidden) {
+            //     board[id.row][id.col].hidden = false;
+            //     board[id.row][id.col].show();
+            // }
         }
+
         play(id) {
 
         }
